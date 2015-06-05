@@ -10,3 +10,4 @@ install:
   - go get -d -t
   - cd "${GOPATH}/src/github.com/influxdb/influxdb" && git checkout v0.9.0-rc31 && cd -
   - go build
+  - go install github.com/influxdb/influxdb && "${GOPATH}/bin/influxd" &
