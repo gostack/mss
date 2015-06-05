@@ -55,11 +55,20 @@ func TestBasicMeasurement(t *testing.T) {
 	ctx, stop := context.WithCancel(context.Background())
 	done := make(chan interface{})
 
-	a := mss.NewAgent(influxClient, "mss_test", 1, 5)
+	a := mss.NewAgent(influxClient, "mss_test", 2, time.Duration(1*time.Millisecond))
 	go a.Run(ctx, done)
 
-	m := mss.Measure("something", mss.Data{"extra": "information"})
-	a.Track(m)
+	a.Track(mss.Measure("something", mss.Data{"index": 1}))
+
+	a.Track(mss.Measure("something", mss.Data{"index": 2}))
+
+	a.Track(mss.Measure("something", mss.Data{"index": 3}))
+
+	time.Sleep(5 * time.Millisecond)
+
+	a.Track(mss.Measure("something", mss.Data{"index": 4}))
+
+	a.Track(mss.Measure("something", mss.Data{"index": 5}))
 
 	stop()
 	<-done
@@ -72,17 +81,18 @@ func TestBasicMeasurement(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(resp.Results) == 0 {
-		t.Error("no results")
+	if len(resp.Results) != 1 {
+		t.Fatalf("expected %d results but got %d", 1, len(resp.Results))
 	}
 
 	r := resp.Results[0]
-	if len(r.Series) == 0 {
-		t.Errorf("no series on %#v", r)
+	if len(r.Series) != 1 {
+		t.Fatalf("expected %d series but got %d", 1, len(r.Series))
 	}
 
-	if len(r.Series[0].Values) == 0 {
-		t.Errorf("no values on %#v", r.Series[0])
+	s := r.Series[0]
+	if len(s.Values) != 5 {
+		t.Fatalf("expected %d series but got %d", 5, len(s.Values))
 	}
 }
 

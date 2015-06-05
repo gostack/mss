@@ -2,6 +2,7 @@ package mss
 
 import (
 	"log"
+	"time"
 
 	"golang.org/x/net/context"
 
@@ -22,49 +23,64 @@ type Agent struct {
 	// in influxdb.
 	batchSize uint
 
-	// maxElapsedSecs specifies the max number of seconds to wait before persisting events.
-	maxElapsedSecs uint
+	// maxElapsedTime specifies the max number of seconds to wait before persisting events.
+	maxElapsedTime time.Duration
 
 	// ch holds a channel to pass Measurement instances into the agent goroutine.
 	ch chan *Measurement
 }
 
 // NewAgent creates a new Agent based on the provided configuration.
-func NewAgent(ic *influx.Client, influxDBName string, batchSize uint, maxElapsedSecs uint) *Agent {
+func NewAgent(ic *influx.Client, influxDBName string, batchSize uint, maxElapsedTime time.Duration) *Agent {
 	return &Agent{
 		influxClient:   ic,
 		influxDBName:   influxDBName,
 		batchSize:      batchSize,
-		maxElapsedSecs: maxElapsedSecs,
+		maxElapsedTime: maxElapsedTime,
 		ch:             make(chan *Measurement),
 	}
 }
 
 // Run loops continuosly processing batch until the context gets canceled.
 func (a *Agent) Run(ctx context.Context, done chan<- interface{}) {
-	log.Println("mss: agent started")
+	var (
+		timeC = time.After(a.maxElapsedTime)
+		batch = make([]*Measurement, 0, a.batchSize)
+	)
 
-	b := make([]*Measurement, 0, a.batchSize)
+	log.Println("mss: agent started")
 
 	for {
 		select {
-		case <-ctx.Done():
-			if len(b) > 0 {
-				log.Printf("mss: persisting %d measurements", len(b))
-				a.persist(b)
-			}
-
-			log.Println("mss: stopping agent due", ctx.Err())
-			close(done)
-			return
 		case m := <-a.ch:
-			b = append(b, m)
-
-			if len(b) == cap(b) {
-				log.Printf("mss: persisting %d measurements", len(b))
-				a.persist(b)
-				b = b[0:0]
+			batch = append(batch, m)
+			if len(batch) == cap(batch) {
+				log.Printf("mss: persisting %d measurements", len(batch))
+				a.persist(batch)
+				timeC = time.After(a.maxElapsedTime)
+				batch = batch[0:0]
 			}
+
+		case <-timeC:
+			if len(batch) > 0 {
+				log.Printf("mss: %s passed, persisting %d measurements", a.maxElapsedTime, len(batch))
+				a.persist(batch)
+				timeC = time.After(a.maxElapsedTime)
+				batch = batch[0:0]
+			}
+
+		case <-ctx.Done():
+			if len(batch) > 0 {
+				log.Printf("mss: shuttind down, persisting %d measurements", len(batch))
+				a.persist(batch)
+			}
+
+			log.Println("mss: agent stopped")
+			if done != nil {
+				close(done)
+			}
+
+			return
 		}
 	}
 }
