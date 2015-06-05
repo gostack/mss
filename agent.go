@@ -9,24 +9,45 @@ import (
 	"golang.org/x/net/context"
 )
 
-func StartAgent(d Driver, maxBatchSize uint, maxElapsedTime time.Duration) chan<- *Measurement {
-	var (
-		sig       = make(chan os.Signal, 1)
-		done      = make(chan interface{})
-		ctx, stop = context.WithCancel(context.Background())
-	)
+var (
+	// holds a CancelFunc when it's running
+	shutdown context.CancelFunc
 
-	// Setup signal handling
-	signal.Notify(sig, os.Interrupt)
+	// holds a channel that will be closed once shutdown is complete
+	done chan interface{}
+)
+
+// Set up signal handling to always properly shutdown
+func init() {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, os.Kill)
+
 	go func() {
-		<-sig
-		stop()
-		<-done
+		<-c
+		shutdown()
 	}()
+}
+
+func StartAgent(d Driver, maxBatchSize uint, maxElapsedTime time.Duration) chan<- *Measurement {
+	var ctx context.Context
+
+	ctx, shutdown = context.WithCancel(context.Background())
+	done = make(chan interface{})
 
 	agent := newAgent(d, maxBatchSize, maxElapsedTime)
-	go func() { agent.Run(ctx, done) }()
+	go func() {
+		agent.Run(ctx)
+		close(done)
+	}()
+
 	return agent.ch
+}
+
+func Shutdown() {
+	if shutdown != nil {
+		shutdown()
+		<-done
+	}
 }
 
 // agent handles the tracking and persistence of measurements, allowing them
@@ -49,7 +70,7 @@ func newAgent(d Driver, maxBatchSize uint, maxElapsedTime time.Duration) *agent 
 }
 
 // Run loops continuosly processing batch until the context gets canceled.
-func (a *agent) Run(ctx context.Context, done chan<- interface{}) {
+func (a *agent) Run(ctx context.Context) {
 	var (
 		timeC = time.After(a.maxElapsedTime)
 		batch = make([]*Measurement, 0, a.maxBatchSize)
@@ -57,6 +78,7 @@ func (a *agent) Run(ctx context.Context, done chan<- interface{}) {
 
 	log.Println("mss: agent started")
 
+loop:
 	for {
 		select {
 		case m := <-a.ch:
@@ -88,11 +110,7 @@ func (a *agent) Run(ctx context.Context, done chan<- interface{}) {
 				}
 			}
 
-			if done != nil {
-				close(done)
-			}
-
-			return
+			break loop
 		}
 	}
 

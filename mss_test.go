@@ -34,6 +34,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
+	mss.Shutdown()
 	os.Exit(retCode)
 }
 
