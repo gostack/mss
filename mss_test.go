@@ -39,16 +39,16 @@ func TestMain(m *testing.M) {
 }
 
 func TestBasicMeasurement(t *testing.T) {
-	ch := mss.StartAgent(driver, 2, time.Duration(1*time.Millisecond))
+	mss.StartAgent(driver, 2, time.Duration(1*time.Millisecond))
 
-	ch <- mss.Measure("something", mss.Data{"index": 1})
-	ch <- mss.Measure("something", mss.Data{"index": 2})
-	ch <- mss.Measure("something", mss.Data{"index": 3})
+	mss.Done(mss.Measure("something", mss.Data{"index": 1}))
+	mss.Done(mss.Measure("something", mss.Data{"index": 2}))
+	mss.Done(mss.Measure("something", mss.Data{"index": 3}))
 
 	time.Sleep(5 * time.Millisecond)
 
-	ch <- mss.Measure("something", mss.Data{"index": 4})
-	ch <- mss.Measure("something", mss.Data{"index": 5})
+	mss.Done(mss.Measure("something", mss.Data{"index": 4}))
+	mss.Done(mss.Measure("something", mss.Data{"index": 5}))
 
 	time.Sleep(100 * time.Millisecond)
 

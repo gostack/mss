@@ -11,14 +11,6 @@ var (
 
 type Data map[string]interface{}
 
-func Measure(name string, data Data) *Measurement {
-	return &Measurement{
-		Name:      name,
-		StartedAt: time.Now(),
-		Data:      data,
-	}
-}
-
 type Measurement struct {
 	Name       string
 	StartedAt  time.Time

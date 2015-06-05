@@ -7,5 +7,5 @@ go:
   - tip
 
 install:
-  - go get -d -t -f ./...
+  - go get -d -t -f -u ./...
   - cd "${GOPAH}/src/github.com/influxdb/influxdb" && git checkout v0.9.0-rc31
