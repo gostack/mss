@@ -6,5 +6,6 @@ go:
   - 1.4
   - tip
 
-before_script:
+install:
+  - go get -d -t -f ./...
   - cd "${GOPAH}/src/github.com/influxdb/influxdb" && git checkout v0.9.0-rc31
