@@ -5,16 +5,11 @@ import (
 	"os"
 	"os/signal"
 	"time"
-
-	"golang.org/x/net/context"
 )
 
 var (
-	// holds a CancelFunc when it's running
-	shutdown context.CancelFunc
-
-	// holds a channel that will be closed once shutdown is complete
-	done chan interface{}
+	// channel for coordinating shutdown
+	shutdown chan interface{}
 )
 
 // Set up signal handling to always properly shutdown
@@ -24,20 +19,17 @@ func init() {
 
 	go func() {
 		<-c
-		shutdown()
+		Shutdown()
 	}()
 }
 
 func StartAgent(d Driver, maxBatchSize uint, maxElapsedTime time.Duration) chan<- *Measurement {
-	var ctx context.Context
-
-	ctx, shutdown = context.WithCancel(context.Background())
-	done = make(chan interface{})
+	shutdown = make(chan interface{})
 
 	agent := newAgent(d, maxBatchSize, maxElapsedTime)
 	go func() {
-		agent.Run(ctx)
-		close(done)
+		agent.Run(shutdown)
+		close(shutdown)
 	}()
 
 	return agent.ch
@@ -45,8 +37,8 @@ func StartAgent(d Driver, maxBatchSize uint, maxElapsedTime time.Duration) chan<
 
 func Shutdown() {
 	if shutdown != nil {
-		shutdown()
-		<-done
+		shutdown <- nil
+		<-shutdown
 	}
 }
 
@@ -70,7 +62,7 @@ func newAgent(d Driver, maxBatchSize uint, maxElapsedTime time.Duration) *agent 
 }
 
 // Run loops continuosly processing batch until the context gets canceled.
-func (a *agent) Run(ctx context.Context) {
+func (a *agent) Run(shutdown <-chan interface{}) {
 	var (
 		timeC = time.After(a.maxElapsedTime)
 		batch = make([]*Measurement, 0, a.maxBatchSize)
@@ -102,7 +94,7 @@ loop:
 			}
 			timeC = time.After(a.maxElapsedTime)
 
-		case <-ctx.Done():
+		case <-shutdown:
 			if len(batch) > 0 {
 				log.Printf("mss: shuttind down, persisting %d measurements", len(batch))
 				if err := a.driver.Persist(batch); err != nil {
