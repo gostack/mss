@@ -2,50 +2,57 @@ package mss
 
 import (
 	"log"
+	"os"
+	"os/signal"
 	"time"
 
 	"golang.org/x/net/context"
-
-	influx "github.com/influxdb/influxdb/client"
 )
 
-// Agent handles the tracking and persistence of measurements, allowing them
+func StartAgent(d Driver, maxBatchSize uint, maxElapsedTime time.Duration) chan<- *Measurement {
+	var (
+		sig       = make(chan os.Signal, 1)
+		done      = make(chan interface{})
+		ctx, stop = context.WithCancel(context.Background())
+	)
+
+	// Setup signal handling
+	signal.Notify(sig, os.Interrupt)
+	go func() {
+		<-sig
+		stop()
+		<-done
+	}()
+
+	agent := newAgent(d, maxBatchSize, maxElapsedTime)
+	go func() { agent.Run(ctx, done) }()
+	return agent.ch
+}
+
+// agent handles the tracking and persistence of measurements, allowing them
 // to be batched for example.
-type Agent struct {
-	// influxClient holds an influxdb client instance to be used when persisting the
-	// measurements.
-	influxClient *influx.Client
-
-	// influxDBName is the database name to be used
-	influxDBName string
-
-	// batchSize specifies how many measurements should be batched together to be persisted
-	// in influxdb.
-	batchSize uint
-
-	// maxElapsedTime specifies the max number of seconds to wait before persisting events.
+type agent struct {
+	driver         Driver
+	maxBatchSize   uint
 	maxElapsedTime time.Duration
-
-	// ch holds a channel to pass Measurement instances into the agent goroutine.
-	ch chan *Measurement
+	ch             chan *Measurement
 }
 
 // NewAgent creates a new Agent based on the provided configuration.
-func NewAgent(ic *influx.Client, influxDBName string, batchSize uint, maxElapsedTime time.Duration) *Agent {
-	return &Agent{
-		influxClient:   ic,
-		influxDBName:   influxDBName,
-		batchSize:      batchSize,
+func newAgent(d Driver, maxBatchSize uint, maxElapsedTime time.Duration) *agent {
+	return &agent{
+		driver:         d,
+		maxBatchSize:   maxBatchSize,
 		maxElapsedTime: maxElapsedTime,
 		ch:             make(chan *Measurement),
 	}
 }
 
 // Run loops continuosly processing batch until the context gets canceled.
-func (a *Agent) Run(ctx context.Context, done chan<- interface{}) {
+func (a *agent) Run(ctx context.Context, done chan<- interface{}) {
 	var (
 		timeC = time.After(a.maxElapsedTime)
-		batch = make([]*Measurement, 0, a.batchSize)
+		batch = make([]*Measurement, 0, a.maxBatchSize)
 	)
 
 	log.Println("mss: agent started")
@@ -56,7 +63,7 @@ func (a *Agent) Run(ctx context.Context, done chan<- interface{}) {
 			batch = append(batch, m)
 			if len(batch) == cap(batch) {
 				log.Printf("mss: persisting %d measurements", len(batch))
-				if err := a.persist(batch); err != nil {
+				if err := a.driver.Persist(batch); err != nil {
 					log.Printf("mss: [error] %s", err)
 				}
 				batch = batch[0:0]
@@ -66,7 +73,7 @@ func (a *Agent) Run(ctx context.Context, done chan<- interface{}) {
 		case <-timeC:
 			if len(batch) > 0 {
 				log.Printf("mss: %s passed, persisting %d measurements", a.maxElapsedTime, len(batch))
-				if err := a.persist(batch); err != nil {
+				if err := a.driver.Persist(batch); err != nil {
 					log.Printf("mss: [error] %s", err)
 				}
 				batch = batch[0:0]
@@ -76,7 +83,7 @@ func (a *Agent) Run(ctx context.Context, done chan<- interface{}) {
 		case <-ctx.Done():
 			if len(batch) > 0 {
 				log.Printf("mss: shuttind down, persisting %d measurements", len(batch))
-				if err := a.persist(batch); err != nil {
+				if err := a.driver.Persist(batch); err != nil {
 					log.Printf("mss: [error] %s", err)
 				}
 			}
@@ -94,51 +101,11 @@ func (a *Agent) Run(ctx context.Context, done chan<- interface{}) {
 
 // Track takes a measurement and tracks it, and eventually persists it depending
 // on batching and timing.
-func (a *Agent) Track(m *Measurement) error {
+func (a *agent) Track(m *Measurement) error {
 	if err := m.Finish(); err != nil {
 		return err
 	}
 
 	a.ch <- m
-	return nil
-}
-
-// Persist writes all the tracked events to InfluxDB
-func (a *Agent) persist(batch []*Measurement) error {
-	points := make([]influx.Point, len(batch))
-
-	for i, m := range batch {
-		p := influx.Point{
-			Name:      m.Name,
-			Time:      m.FinishedAt,
-			Precision: "n",
-			Fields: map[string]interface{}{
-				"duration": m.Duration().Nanoseconds(),
-			},
-		}
-
-		for k, v := range m.Data {
-			if _, exst := p.Fields[k]; !exst {
-				p.Fields[k] = v
-			}
-		}
-
-		points[i] = p
-	}
-
-	b := influx.BatchPoints{
-		Database:        a.influxDBName,
-		Points:          points,
-		Precision:       "n",
-		RetentionPolicy: "default",
-	}
-
-	resp, err := a.influxClient.Write(b)
-	if err != nil {
-		return err
-	} else if resp != nil && resp.Error() != nil {
-		return resp.Error()
-	}
-
 	return nil
 }
