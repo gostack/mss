@@ -41,7 +41,10 @@ func TestMain(m *testing.M) {
 func TestBasicMeasurement(t *testing.T) {
 	mss.StartAgent(driver, 2, time.Duration(1*time.Millisecond))
 
-	mss.Done(mss.Measure("something", mss.Data{"index": 1}))
+	m := mss.Measure("something", mss.Data{"index": 1})
+	m.Data["extra"] = "info"
+	mss.Done(m)
+
 	mss.Done(mss.Measure("something", mss.Data{"index": 2}))
 	mss.Done(mss.Measure("something", mss.Data{"index": 3}))
 

@@ -15,7 +15,7 @@ type Measurement struct {
 	Name       string
 	StartedAt  time.Time
 	FinishedAt time.Time
-	Data
+	Data       Data
 }
 
 func (m *Measurement) Finish() error {
