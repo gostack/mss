@@ -56,26 +56,31 @@ func (a *Agent) Run(ctx context.Context, done chan<- interface{}) {
 			batch = append(batch, m)
 			if len(batch) == cap(batch) {
 				log.Printf("mss: persisting %d measurements", len(batch))
-				a.persist(batch)
-				timeC = time.After(a.maxElapsedTime)
+				if err := a.persist(batch); err != nil {
+					log.Printf("mss: [error] %s", err)
+				}
 				batch = batch[0:0]
+				timeC = time.After(a.maxElapsedTime)
 			}
 
 		case <-timeC:
 			if len(batch) > 0 {
 				log.Printf("mss: %s passed, persisting %d measurements", a.maxElapsedTime, len(batch))
-				a.persist(batch)
-				timeC = time.After(a.maxElapsedTime)
+				if err := a.persist(batch); err != nil {
+					log.Printf("mss: [error] %s", err)
+				}
 				batch = batch[0:0]
 			}
+			timeC = time.After(a.maxElapsedTime)
 
 		case <-ctx.Done():
 			if len(batch) > 0 {
 				log.Printf("mss: shuttind down, persisting %d measurements", len(batch))
-				a.persist(batch)
+				if err := a.persist(batch); err != nil {
+					log.Printf("mss: [error] %s", err)
+				}
 			}
 
-			log.Println("mss: agent stopped")
 			if done != nil {
 				close(done)
 			}
@@ -83,6 +88,8 @@ func (a *Agent) Run(ctx context.Context, done chan<- interface{}) {
 			return
 		}
 	}
+
+	log.Println("mss: agent stopped")
 }
 
 // Track takes a measurement and tracks it, and eventually persists it depending
