@@ -3,28 +3,70 @@ package mss
 import (
 	"log"
 
+	"golang.org/x/net/context"
+
 	influx "github.com/influxdb/influxdb/client"
 )
 
 // Agent handles the tracking and persistence of measurements, allowing them
 // to be batched for example.
 type Agent struct {
+	// influxClient holds an influxdb client instance to be used when persisting the
+	// measurements.
 	influxClient *influx.Client
-	batch        []*Measurement
+
+	// influxDBName is the database name to be used
+	influxDBName string
+
+	// batchSize specifies how many measurements should be batched together to be persisted
+	// in influxdb.
+	batchSize uint
+
+	// maxElapsedSecs specifies the max number of seconds to wait before persisting events.
+	maxElapsedSecs uint
+
+	// ch holds a channel to pass Measurement instances into the agent goroutine.
+	ch chan *Measurement
 }
 
 // NewAgent creates a new Agent based on the provided configuration.
-func NewAgent(cfg *Config) (*Agent, error) {
-	c, err := influx.NewClient(cfg.InfluxDB)
-	if err != nil {
-		return nil, err
+func NewAgent(ic *influx.Client, influxDBName string, batchSize uint, maxElapsedSecs uint) *Agent {
+	return &Agent{
+		influxClient:   ic,
+		influxDBName:   influxDBName,
+		batchSize:      batchSize,
+		maxElapsedSecs: maxElapsedSecs,
+		ch:             make(chan *Measurement),
 	}
+}
 
-	if _, _, err := c.Ping(); err != nil {
-		return nil, err
+// Run loops continuosly processing batch until the context gets canceled.
+func (a *Agent) Run(ctx context.Context, done chan<- interface{}) {
+	log.Println("mss: agent started")
+
+	b := make([]*Measurement, 0, a.batchSize)
+
+	for {
+		select {
+		case <-ctx.Done():
+			if len(b) > 0 {
+				log.Printf("mss: persisting %d measurements", len(b))
+				a.persist(b)
+			}
+
+			log.Println("mss: stopping agent due", ctx.Err())
+			close(done)
+			return
+		case m := <-a.ch:
+			b = append(b, m)
+
+			if len(b) == cap(b) {
+				log.Printf("mss: persisting %d measurements", len(b))
+				a.persist(b)
+				b = b[0:0]
+			}
+		}
 	}
-
-	return &Agent{influxClient: c, batch: make([]*Measurement, 0)}, nil
 }
 
 // Track takes a measurement and tracks it, and eventually persists it depending
@@ -34,15 +76,15 @@ func (a *Agent) Track(m *Measurement) error {
 		return err
 	}
 
-	a.batch = append(a.batch, m)
+	a.ch <- m
 	return nil
 }
 
 // Persist writes all the tracked events to InfluxDB
-func (a *Agent) Persist() error {
-	points := make([]influx.Point, len(a.batch))
+func (a *Agent) persist(batch []*Measurement) error {
+	points := make([]influx.Point, len(batch))
 
-	for i, m := range a.batch {
+	for i, m := range batch {
 		p := influx.Point{
 			Name:      m.Name,
 			Time:      m.FinishedAt,
@@ -62,13 +104,11 @@ func (a *Agent) Persist() error {
 	}
 
 	b := influx.BatchPoints{
-		Database:        "mss",
+		Database:        a.influxDBName,
 		Points:          points,
 		Precision:       "n",
 		RetentionPolicy: "default",
 	}
-
-	log.Printf("%#v", b)
 
 	resp, err := a.influxClient.Write(b)
 	if err != nil {
