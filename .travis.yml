@@ -9,8 +9,7 @@ go:
 install:
   - go get -d -t
   - cd "${GOPATH}/src/github.com/influxdb/influxdb" && git checkout v0.9.0-rc31 && cd -
-  - go build
-  - go install github.com/influxdb/influxdb
 
-before_script:
-  - ${GOPATH}/bin/influxd > /dev/null 2>&1 &
+script:
+  - go build
+  - go test -v
