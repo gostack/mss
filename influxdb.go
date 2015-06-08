@@ -54,6 +54,11 @@ func (d *InfluxDBDriver) Persist(batch []*Measurement) error {
 			Name:      m.Name,
 			Time:      m.FinishedAt,
 			Precision: "n",
+			Tags: map[string]string{
+				"hostname":    m.Info.Hostname,
+				"service":     m.Info.Service,
+				"transaction": m.Info.TransactionID.String(),
+			},
 			Fields: map[string]interface{}{
 				"duration": m.Duration().Nanoseconds(),
 			},

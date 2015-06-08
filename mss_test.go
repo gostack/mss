@@ -7,6 +7,7 @@ import (
 
 	"github.com/gostack/mss"
 	influx "github.com/influxdb/influxdb/client"
+	"golang.org/x/net/context"
 )
 
 var driver *mss.InfluxDBDriver
@@ -41,17 +42,19 @@ func TestMain(m *testing.M) {
 func TestBasicMeasurement(t *testing.T) {
 	mss.StartAgent(driver, 2, time.Duration(1*time.Millisecond))
 
-	m := mss.Measure("something", mss.Data{"index": 1})
-	m.Data["extra"] = "info"
-	mss.Done(m)
+	ctx := context.Background()
 
-	mss.Done(mss.Measure("something", mss.Data{"index": 2}))
-	mss.Done(mss.Measure("something", mss.Data{"index": 3}))
+	m := mss.NewMeasurement(ctx, "something", mss.Data{"index": 1})
+	m.Data["extra"] = "info"
+	mss.Record(m)
+
+	mss.Record(mss.NewMeasurement(ctx, "something", mss.Data{"index": 2}))
+	mss.Record(mss.NewMeasurement(ctx, "something", mss.Data{"index": 3}))
 
 	time.Sleep(5 * time.Millisecond)
 
-	mss.Done(mss.Measure("something", mss.Data{"index": 4}))
-	mss.Done(mss.Measure("something", mss.Data{"index": 5}))
+	mss.Record(mss.NewMeasurement(ctx, "something", mss.Data{"index": 4}))
+	mss.Record(mss.NewMeasurement(ctx, "something", mss.Data{"index": 5}))
 
 	time.Sleep(100 * time.Millisecond)
 

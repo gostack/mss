@@ -43,15 +43,7 @@ func Shutdown() {
 	<-shutdownChan
 }
 
-func Measure(name string, data Data) *Measurement {
-	return &Measurement{
-		Name:      name,
-		StartedAt: time.Now(),
-		Data:      data,
-	}
-}
-
-func Done(m *Measurement) {
+func Record(m *Measurement) {
 	m.Finish()
 	measurementsChan <- m
 }
