@@ -23,6 +23,7 @@ import (
 )
 
 var (
+	running          bool
 	measurementsChan = make(chan *Measurement)
 	shutdownChan     = make(chan interface{}, 1)
 )
@@ -52,14 +53,20 @@ func StartAgent(d Driver, maxBatchSize uint, maxElapsedTime time.Duration) {
 		agent.Run()
 		close(shutdownChan)
 	}()
+
+	running = true
 }
 
 func Shutdown() {
 	shutdownChan <- nil
 	<-shutdownChan
+	running = false
 }
 
 func Record(m *Measurement) {
 	m.Finish()
-	measurementsChan <- m
+
+	if running {
+		measurementsChan <- m
+	}
 }
