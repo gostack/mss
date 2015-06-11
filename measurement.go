@@ -20,7 +20,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/gostack/web"
+	"github.com/gostack/ctxinfo"
 	"golang.org/x/net/context"
 )
 
@@ -31,7 +31,8 @@ var (
 type Data map[string]interface{}
 
 type Measurement struct {
-	Info web.Info
+	EnvInfo ctxinfo.EnvInfo
+	TxInfo  ctxinfo.TxInfo
 
 	Name       string
 	StartedAt  time.Time
@@ -41,7 +42,8 @@ type Measurement struct {
 
 func NewMeasurement(ctx context.Context, name string, data Data) *Measurement {
 	return &Measurement{
-		Info:      web.InfoFromContext(ctx),
+		EnvInfo:   ctxinfo.EnvFromContext(ctx),
+		TxInfo:    ctxinfo.TxFromContext(ctx),
 		Name:      name,
 		StartedAt: time.Now(),
 		Data:      data,
