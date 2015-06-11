@@ -71,12 +71,12 @@ func (d *InfluxDBDriver) Persist(batch []*Measurement) error {
 			Time:      m.FinishedAt,
 			Precision: "n",
 			Tags: map[string]string{
-				"hostname":      m.EnvInfo.Hostname,
-				"application":   m.EnvInfo.Application,
-				"transactionID": m.TxInfo.TransactionID.String(),
+				"hostname":    m.EnvInfo.Hostname,
+				"application": m.EnvInfo.Application,
 			},
 			Fields: map[string]interface{}{
-				"duration": m.Duration().Nanoseconds(),
+				"transactionID": m.TxInfo.TransactionID.String(),
+				"value":         m.Duration().Nanoseconds(),
 			},
 		}
 
