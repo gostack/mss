@@ -41,6 +41,8 @@ func init() {
 
 // Define a custom global setup and teardown for the test suite
 func TestMain(m *testing.M) {
+	driver.DropInfluxDB()
+
 	if err := driver.CreateInfluxDB(); err != nil {
 		panic(err)
 	}
@@ -72,9 +74,9 @@ func TestBasicMeasurement(t *testing.T) {
 	mss.Record(mss.NewMeasurement(ctx, "something", mss.Data{"index": 4}))
 	mss.Record(mss.NewMeasurement(ctx, "something", mss.Data{"index": 5}))
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1500 * time.Millisecond)
 
-	q := influx.Query{Database: driver.Database, Command: "SELECT * FROM something"}
+	q := influx.Query{Database: driver.Database, Command: `SELECT * FROM "something"`}
 	resp, err := driver.Client.Query(q)
 	if err != nil {
 		t.Fatal(err)

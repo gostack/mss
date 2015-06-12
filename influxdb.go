@@ -67,9 +67,9 @@ func (d *InfluxDBDriver) Persist(batch []*Measurement) error {
 
 	for i, m := range batch {
 		p := influx.Point{
-			Name:      m.Name,
-			Time:      m.FinishedAt,
-			Precision: "n",
+			Measurement: m.Name,
+			Time:        m.FinishedAt,
+			Precision:   "n",
 			Tags: map[string]string{
 				"hostname":    m.Info.Hostname,
 				"application": m.Info.Application,
@@ -99,7 +99,8 @@ func (d *InfluxDBDriver) Persist(batch []*Measurement) error {
 	resp, err := d.Client.Write(b)
 	if err != nil {
 		return err
-	} else if resp != nil && resp.Error() != nil {
+	}
+	if resp != nil && resp.Error() != nil {
 		return resp.Error()
 	}
 
@@ -108,8 +109,6 @@ func (d *InfluxDBDriver) Persist(batch []*Measurement) error {
 
 // creates the InfluxDB database
 func (d *InfluxDBDriver) CreateInfluxDB() error {
-	d.DropInfluxDB()
-
 	q := influx.Query{Command: fmt.Sprintf(`CREATE DATABASE "%s"`, d.Database)}
 	resp, err := d.Client.Query(q)
 	if err != nil {

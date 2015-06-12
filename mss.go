@@ -24,7 +24,7 @@ import (
 
 var (
 	running          bool
-	measurementsChan = make(chan *Measurement)
+	measurementsChan = make(chan *Measurement, 50)
 	shutdownChan     = make(chan interface{}, 1)
 )
 
