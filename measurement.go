@@ -31,8 +31,7 @@ var (
 type Data map[string]interface{}
 
 type Measurement struct {
-	EnvInfo ctxinfo.EnvInfo
-	TxInfo  ctxinfo.TxInfo
+	Info ctxinfo.Info
 
 	Name       string
 	StartedAt  time.Time
@@ -42,8 +41,7 @@ type Measurement struct {
 
 func NewMeasurement(ctx context.Context, name string, data Data) *Measurement {
 	return &Measurement{
-		EnvInfo:   ctxinfo.EnvFromContext(ctx),
-		TxInfo:    ctxinfo.TxFromContext(ctx),
+		Info:      ctxinfo.FromContext(ctx),
 		Name:      name,
 		StartedAt: time.Now(),
 		Data:      data,
