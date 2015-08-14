@@ -19,8 +19,10 @@ package mss
 import (
 	"fmt"
 	"net/url"
+	"time"
 
 	influx "github.com/influxdb/influxdb/client"
+	"github.com/rubyist/circuitbreaker"
 )
 
 type Driver interface {
@@ -42,7 +44,7 @@ func NewInfluxDBDriver(cfg *InfluxDBConfig) (*InfluxDBDriver, error) {
 		return nil, err
 	}
 
-	return &InfluxDBDriver{Client: c, Database: cfg.Database}, nil
+	return &InfluxDBDriver{Client: c, Database: cfg.Database, cb: circuit.NewThresholdBreaker(10)}, nil
 }
 
 // InfluxDBConfig specifies the configuration for connecting to a InfluxDB instance
@@ -59,6 +61,7 @@ type InfluxDBConfig struct {
 type InfluxDBDriver struct {
 	Client   *influx.Client
 	Database string
+	cb       *circuit.Breaker
 }
 
 // Persist implements the Driver interface, persisting the data points to InfluxDB.
@@ -90,21 +93,23 @@ func (d *InfluxDBDriver) Persist(batch []*Measurement) error {
 	}
 
 	b := influx.BatchPoints{
-		Database:        d.Database,
-		Points:          points,
-		Precision:       "n",
-		RetentionPolicy: "default",
+		Database:         d.Database,
+		Points:           points,
+		Precision:        "n",
+		RetentionPolicy:  "default",
+		WriteConsistency: influx.ConsistencyAny,
 	}
 
-	resp, err := d.Client.Write(b)
-	if err != nil {
-		return err
-	}
-	if resp != nil && resp.Error() != nil {
-		return resp.Error()
-	}
-
-	return nil
+	return d.cb.Call(func() error {
+		resp, err := d.Client.Write(b)
+		if err != nil {
+			return err
+		}
+		if resp != nil && resp.Error() != nil {
+			return resp.Error()
+		}
+		return nil
+	}, 2*time.Second)
 }
 
 // creates the InfluxDB database

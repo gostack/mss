@@ -21,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gostack/ctxinfo"
 	"github.com/gostack/mss"
 	influx "github.com/influxdb/influxdb/client"
 	"golang.org/x/net/context"
@@ -60,7 +61,9 @@ func TestMain(m *testing.M) {
 func TestBasicMeasurement(t *testing.T) {
 	mss.StartAgent(driver, 2, time.Duration(1*time.Millisecond))
 
-	ctx := context.Background()
+	ctx := ctxinfo.TxContext(
+		ctxinfo.EnvContext(context.Background(), "myapp"),
+	)
 
 	m := mss.NewMeasurement(ctx, "something", mss.Data{"index": 1})
 	m.Data["extra"] = "info"

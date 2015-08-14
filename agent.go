@@ -45,7 +45,7 @@ loop:
 		select {
 		case m := <-a.MeasurementsChan:
 			batch = append(batch, m)
-			if len(batch) == cap(batch) {
+			if len(batch) >= cap(batch)/2 {
 				log.Printf("mss: persisting %d measurements", len(batch))
 				if err := a.Driver.Persist(batch); err != nil {
 					log.Printf("mss: [error] %s", err)
